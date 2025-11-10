@@ -8,14 +8,14 @@ echo "🚀 Memasang proteksi Admin Only untuk halaman Nests..."
 
 # Backup file lama
 if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+    mv "$REMOTE_PATH" "$BACKUP_PATH"
+    echo "📦 Backup file lama dibuat di $BACKUP_PATH"
 fi
 
 mkdir -p "$(dirname "$REMOTE_PATH")"
 chmod 755 "$(dirname "$REMOTE_PATH")"
 
-# Tulis file baru dengan proteksi admin
+# Tulis file baru
 cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
@@ -44,15 +44,12 @@ class NestController extends Controller
         protected ViewFactory $view
     ) {}
 
-    public function index(): View|string
+    // Hanya admin utama bisa lihat daftar Nests
+    public function index(): View
     {
         $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            return response("<center style='margin-top:100px;font-family:Arial'>
-                <h1>🚫 Akses Ditolak</h1>
-                <p>Hanya admin utama (ID 1) yang dapat membuka menu <b>Nests</b>.</p>
-                <a href='/admin' style='color:#007bff'>← Kembali ke Dashboard</a>
-            </center>", 403);
+        if (!$user || $user->root_admin !== 1) {
+            abort(403, '🚫 Akses ditolak! Hanya admin utama yang bisa membuka menu Nests.');
         }
 
         return $this->view->make('admin.nests.index', [
@@ -60,7 +57,20 @@ class NestController extends Controller
         ]);
     }
 
-    // fungsi lain tidak dihapus, tapi hanya admin utama yang bisa akses halaman utama
+    // Hanya admin utama bisa lihat halaman detail Nest
+    public function view(int $nest): View
+    {
+        $user = Auth::user();
+        if (!$user || $user->root_admin !== 1) {
+            abort(403, '🚫 Halaman ini hanya bisa dibuka oleh Admin Utama.');
+        }
+
+        return $this->view->make('admin.nests.view', [
+            'nest' => $this->repository->getWithEggServers($nest),
+        ]);
+    }
+
+    // Fungsi lain tetap normal (create, store, update, destroy)
 }
 EOF
 
