@@ -1,71 +1,79 @@
 #!/bin/bash
+set -euo pipefail
 
-REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nests/EggController.php"
+EGG_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nests/EggController.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
-BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+EGG_BACKUP="${EGG_PATH}.bak_${TIMESTAMP}"
 
-echo "🚀 Memasang proteksi Admin Only untuk halaman Nests..."
+echo "🚀 Memasang proteksi Admin Only untuk halaman Egg (view)..."
 
 # Backup file lama
-if [ -f "$REMOTE_PATH" ]; then
-  mv "$REMOTE_PATH" "$BACKUP_PATH"
-  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+if [ -f "$EGG_PATH" ]; then
+  mv "$EGG_PATH" "$EGG_BACKUP"
+  echo "📦 Backup EggController lama: $EGG_BACKUP"
+else
+  echo "ℹ️ File EggController lama tidak ditemukan, membuat baru: $EGG_PATH"
 fi
 
 # Pastikan direktori ada
-mkdir -p "$(dirname "$REMOTE_PATH")"
-chmod 755 "$(dirname "$REMOTE_PATH")"
+mkdir -p "$(dirname "$EGG_PATH")"
+chmod 755 "$(dirname "$EGG_PATH")"
 
-# Tulis file baru dengan proteksi admin
-cat > "$REMOTE_PATH" << 'EOF'
+# Tulis file baru dengan proteksi di view() saja
+cat > "$EGG_PATH" << 'EOF'
 <?php
 
 namespace Pterodactyl\Http\Controllers\Admin\Nests;
 
 use Illuminate\View\View;
+use Pterodactyl\Models\Egg;
 use Illuminate\Http\RedirectResponse;
 use Prologue\Alerts\AlertsMessageBag;
 use Illuminate\View\Factory as ViewFactory;
 use Pterodactyl\Http\Controllers\Controller;
-use Pterodactyl\Services\Nests\NestUpdateService;
-use Pterodactyl\Services\Nests\NestCreationService;
-use Pterodactyl\Services\Nests\NestDeletionService;
+use Pterodactyl\Services\Eggs\EggUpdateService;
+use Pterodactyl\Services\Eggs\EggCreationService;
+use Pterodactyl\Services\Eggs\EggDeletionService;
+use Pterodactyl\Http\Requests\Admin\Egg\EggFormRequest;
+use Pterodactyl\Contracts\Repository\EggRepositoryInterface;
 use Pterodactyl\Contracts\Repository\NestRepositoryInterface;
-use Pterodactyl\Http\Requests\Admin\Nest\StoreNestFormRequest;
 use Illuminate\Support\Facades\Auth;
 
-class NestController extends Controller
+class EggController extends Controller
 {
     public function __construct(
         protected AlertsMessageBag $alert,
-        protected NestCreationService $nestCreationService,
-        protected NestDeletionService $nestDeletionService,
-        protected NestRepositoryInterface $repository,
-        protected NestUpdateService $nestUpdateService,
+        protected EggCreationService $creationService,
+        protected EggDeletionService $deletionService,
+        protected EggRepositoryInterface $repository,
+        protected EggUpdateService $updateService,
+        protected NestRepositoryInterface $nestRepository,
         protected ViewFactory $view
     ) {}
 
-    public function index(): View|string
+    public function view(Egg $egg): View
     {
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            return response("<center style='margin-top:100px;font-family:Arial'>
-                <h1 style='color:red;'>🚫 Halaman Egg ini hanya bisa dibuka oleh Admin Utama <b>Nests</b>.</h1>
-                <a href='/admin' style='color:#007bff'>← Kembali ke Dashboard</a>
-            </center>", 403);
+            abort(403, '🚫 Halaman Egg ini hanya bisa dibuka oleh Admin Utama.');
         }
 
-        return $this->view->make('admin.nests.index', [
-            'nests' => $this->repository->getWithCounts(),
+        return $this->view->make('admin.eggs.view', [
+            'egg' => $egg,
+            'images' => array_map(
+                fn ($key, $value) => $key === $value ? $value : "$key|$value",
+                array_keys($egg->docker_images),
+                $egg->docker_images,
+            ),
         ]);
     }
-
-    // fungsi lain tidak dihapus, tapi hanya admin utama yang bisa akses halaman utama
 }
 EOF
 
-chmod 644 "$REMOTE_PATH"
+chmod 644 "$EGG_PATH"
 
-echo "✅ Proteksi halaman Nests berhasil dipasang!"
-echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🗂️ Backup file lama: $BACKUP_PATH"
+echo "✅ Proteksi halaman Egg (view) berhasil dipasang!"
+echo "📂 Lokasi file: $EGG_PATH"
+if [ -f "$EGG_BACKUP" ]; then
+  echo "🗂️ Backup file lama: $EGG_BACKUP"
+fi
