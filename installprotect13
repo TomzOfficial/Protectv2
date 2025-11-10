@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nests/EggController.php"
 TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
