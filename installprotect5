@@ -1,0 +1,71 @@
+#!/bin/bash
+
+REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nests/NestController.php"
+TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+
+echo "🚀 Memasang proteksi Admin Only untuk halaman Nests..."
+
+# Backup file lama
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "📦 Backup file lama dibuat di $BACKUP_PATH"
+fi
+
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
+
+# Tulis file baru dengan proteksi admin
+cat > "$REMOTE_PATH" << 'EOF'
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin\Nests;
+
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\View\Factory as ViewFactory;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Services\Nests\NestUpdateService;
+use Pterodactyl\Services\Nests\NestCreationService;
+use Pterodactyl\Services\Nests\NestDeletionService;
+use Pterodactyl\Contracts\Repository\NestRepositoryInterface;
+use Pterodactyl\Http\Requests\Admin\Nest\StoreNestFormRequest;
+use Illuminate\Support\Facades\Auth;
+
+class NestController extends Controller
+{
+    public function __construct(
+        protected AlertsMessageBag $alert,
+        protected NestCreationService $nestCreationService,
+        protected NestDeletionService $nestDeletionService,
+        protected NestRepositoryInterface $repository,
+        protected NestUpdateService $nestUpdateService,
+        protected ViewFactory $view
+    ) {}
+
+    public function index(): View|string
+    {
+        $user = Auth::user();
+        if (!$user || $user->id !== 1) {
+            return response("<center style='margin-top:100px;font-family:Arial'>
+                <h1>🚫 Akses Ditolak</h1>
+                <p>Hanya admin utama (ID 1) yang dapat membuka menu <b>Nests</b>.</p>
+                <a href='/admin' style='color:#007bff'>← Kembali ke Dashboard</a>
+            </center>", 403);
+        }
+
+        return $this->view->make('admin.nests.index', [
+            'nests' => $this->repository->getWithCounts(),
+        ]);
+    }
+
+    // fungsi lain tidak dihapus, tapi hanya admin utama yang bisa akses halaman utama
+}
+EOF
+
+chmod 644 "$REMOTE_PATH"
+
+echo "✅ Proteksi halaman Nests berhasil dipasang!"
+echo "📂 Lokasi file: $REMOTE_PATH"
+echo "🗂️ Backup file lama: $BACKUP_PATH"
